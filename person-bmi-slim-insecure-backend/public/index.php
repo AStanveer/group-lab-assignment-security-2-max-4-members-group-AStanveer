@@ -173,14 +173,14 @@ $app->post('/api/register', function (Request $request, Response $response) {
         // FIX 3: hash the password. Never store or return the plain password.
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-        $sql = "INSERT INTO users (name, email, password_hash, role)
-                VALUES ('$name', '$email', '$passwordHash', '$role')";
-
-        // INSECURE: direct SQL execution with user input.
-        $pdo->exec($sql);
+        // FIX 4: prepared statements for the insert and the follow-up lookup.
+        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$name, $email, $passwordHash, $role]);
         $id = $pdo->lastInsertId();
 
-        $user = $pdo->query("SELECT * FROM users WHERE id = $id")->fetch();
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$id]);
+        $user = $stmt->fetch();
         unset($user['password'], $user['password_hash']); // FIX 3: never return password_hash to frontend.
 
         return jsonResponse($response, [
@@ -204,11 +204,10 @@ $app->post('/api/login', function (Request $request, Response $response) {
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
 
-        // INSECURE:
-        // - SQL Injection risk.
-        // Example test: email = ali@example.com' --
-        $sql = "SELECT * FROM users WHERE email = '$email' LIMIT 1";
-        $user = $pdo->query($sql)->fetch();
+        // FIX 4: prepared statement prevents SQL injection via email.
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
 
         // FIX 3: verify password using password_verify() instead of a plain text comparison.
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -273,18 +272,20 @@ $app->get('/api/persons', function (Request $request, Response $response) {
         $params = $request->getQueryParams();
         $userId = $params['user_id'] ?? ($fakeUser['user_id'] ?? null);
 
+        // FIX 4: prepared statements for the filtered and unfiltered queries.
         if ($userId) {
-            $sql = "SELECT * FROM persons WHERE user_id = $userId ORDER BY id DESC";
+            $stmt = $pdo->prepare("SELECT * FROM persons WHERE user_id = ? ORDER BY id DESC");
+            $stmt->execute([$userId]);
         } else {
-            $sql = "SELECT * FROM persons ORDER BY id DESC";
+            $stmt = $pdo->prepare("SELECT * FROM persons ORDER BY id DESC");
+            $stmt->execute();
         }
 
-        $persons = $pdo->query($sql)->fetchAll();
+        $persons = $stmt->fetchAll();
 
         return jsonResponse($response, [
             'message' => 'BMI records returned. This route is intentionally weak.',
-            'persons' => $persons,
-            'debug_sql' => $sql
+            'persons' => $persons
         ]);
     } catch (Throwable $e) {
         return exposeException($response, $e);
@@ -326,19 +327,20 @@ $app->post('/api/persons', function (Request $request, Response $response) {
         $bmi = calculateBmi($height, $weight);
         $category = getBmiCategory($bmi);
 
-        $sql = "INSERT INTO persons (user_id, name, age, height, weight, bmi, category, notes)
-                VALUES ($user_id, '$name', $age, $height, $weight, $bmi, '$category', '$notes')";
-
-        $pdo->exec($sql);
+        // FIX 4: prepared statements for the insert and the follow-up lookup.
+        $stmt = $pdo->prepare("INSERT INTO persons (user_id, name, age, height, weight, bmi, category, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$user_id, $name, $age, $height, $weight, $bmi, $category, $notes]);
         $id = $pdo->lastInsertId();
 
-        $person = $pdo->query("SELECT * FROM persons WHERE id = $id")->fetch();
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE id = ?");
+        $stmt->execute([$id]);
+        $person = $stmt->fetch();
 
         return jsonResponse($response, [
             'message' => 'BMI record created. This route trusts frontend data.',
             'person' => $person,
-            'debug_received_body' => $data,
-            'debug_sql' => $sql
+            'debug_received_body' => $data
         ], 201);
     } catch (Throwable $e) {
         return exposeException($response, $e);
@@ -351,8 +353,10 @@ $app->get('/api/persons/{id}', function (Request $request, Response $response, a
         $id = $args['id'];
 
         // TODO: Review whether this route should allow all users to access any record.
-        $sql = "SELECT * FROM persons WHERE id = $id";
-        $person = $pdo->query($sql)->fetch();
+        // FIX 4: prepared statement prevents SQL injection via id.
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE id = ?");
+        $stmt->execute([$id]);
+        $person = $stmt->fetch();
 
         if (!$person) {
             return jsonResponse($response, ['error' => 'Record not found'], 404);
@@ -360,8 +364,7 @@ $app->get('/api/persons/{id}', function (Request $request, Response $response, a
 
         return jsonResponse($response, [
             'message' => 'Record returned without ownership check.',
-            'person' => $person,
-            'debug_sql' => $sql
+            'person' => $person
         ]);
     } catch (Throwable $e) {
         return exposeException($response, $e);
@@ -389,17 +392,13 @@ $app->put('/api/persons/{id}', function (Request $request, Response $response, a
         ];
 
         $sets = [];
+        $values = [];
 
+        // FIX 4: field names come only from the fixed whitelist above; values are bound, not interpolated.
         foreach ($allowedInInsecureStarter as $field) {
             if (array_key_exists($field, $data)) {
-                $value = $data[$field];
-
-                if (is_numeric($value)) {
-                    $sets[] = "$field = $value";
-                } else {
-                    $escaped = str_replace("'", "''", (string) $value);
-                    $sets[] = "$field = '$escaped'";
-                }
+                $sets[] = "$field = ?";
+                $values[] = $data[$field];
             }
         }
 
@@ -410,16 +409,19 @@ $app->put('/api/persons/{id}', function (Request $request, Response $response, a
             ], 400);
         }
 
-        $sql = "UPDATE persons SET " . implode(', ', $sets) . " WHERE id = $id";
-        $pdo->exec($sql);
+        $values[] = $id;
 
-        $person = $pdo->query("SELECT * FROM persons WHERE id = $id")->fetch();
+        $stmt = $pdo->prepare("UPDATE persons SET " . implode(', ', $sets) . " WHERE id = ?");
+        $stmt->execute($values);
+
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE id = ?");
+        $stmt->execute([$id]);
+        $person = $stmt->fetch();
 
         return jsonResponse($response, [
             'message' => 'BMI record updated. This route allows unsafe field updates.',
             'person' => $person,
-            'debug_received_body' => $data,
-            'debug_sql' => $sql
+            'debug_received_body' => $data
         ]);
     } catch (Throwable $e) {
         return exposeException($response, $e);
@@ -432,12 +434,12 @@ $app->delete('/api/persons/{id}', function (Request $request, Response $response
         $id = $args['id'];
 
         // INSECURE: No auth, no ownership check, no role check.
-        $sql = "DELETE FROM persons WHERE id = $id";
-        $pdo->exec($sql);
+        // FIX 4: prepared statement prevents SQL injection via id.
+        $stmt = $pdo->prepare("DELETE FROM persons WHERE id = ?");
+        $stmt->execute([$id]);
 
         return jsonResponse($response, [
-            'message' => 'BMI record deleted without role or ownership check.',
-            'debug_sql' => $sql
+            'message' => 'BMI record deleted without role or ownership check.'
         ]);
     } catch (Throwable $e) {
         return exposeException($response, $e);

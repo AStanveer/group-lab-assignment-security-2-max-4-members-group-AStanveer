@@ -1,1 +1,143 @@
+# ============================================
+# PHP / Backend
+# ============================================
+
+# Composer
 /vendor/
+composer.phar
+composer.lock
+
+# PHP environment
+.env
+.env.local
+.env.*.local
+.phpunit.result.cache
+*.log
+
+# PHPStorm / IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# ============================================
+# Node.js / Frontend
+# ============================================
+
+# Node modules
+/person-bmi-vue-cli-insecure-starter/node_modules/
+/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+/person-bmi-vue-cli-insecure-starter/dist/
+/dist/
+/person-bmi-vue-cli-insecure-starter/build/
+/build/
+
+# Environment files
+/person-bmi-vue-cli-insecure-starter/.env.local
+/person-bmi-vue-cli-insecure-starter/.env.*.local
+
+# Cache
+/person-bmi-vue-cli-insecure-starter/.cache/
+/.cache/
+
+# ============================================
+# OS / System Files
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+*.exe
+*.dll
+*.so
+*.sl
+*.dylib
+
+# ============================================
+# Archive / Backup Files
+# ============================================
+
+*.rar
+*.zip
+*.tar.gz
+*.7z
+*.bak
+*.backup
+*.old
+*.orig
+
+# ============================================
+# Project Specific
+# ============================================
+
+# Reports
+/report/
+*.pdf
+
+# SQL dumps
+*.sql
+*.sql.gz
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+logs/
+*.log
+
+# Secrets
+*.pem
+*.key
+*.crt
+*.csr
+
+# ============================================
+# IDE Specific
+# ============================================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ============================================
+# Testing
+# ============================================
+
+/coverage/
+.nyc_output/
+/test-results/
+
+# ============================================
+# Docker
+# ============================================
+
+docker-compose.override.yml
+.docker/

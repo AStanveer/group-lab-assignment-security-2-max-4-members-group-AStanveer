@@ -8,13 +8,10 @@
     <p><strong>BMI:</strong> {{ person.bmi }}</p>
     <p><strong>Category:</strong> {{ person.category }}</p>
 
-    <div class="notice danger">
-      <strong>Notes rendered with v-html intentionally:</strong>
-      <!-- INSECURE: v-html can execute user-controlled HTML/script-like payloads. -->
-       <!-- Investigation question:
-     This renders notes as HTML.
-     What happens if notes contains an XSS payload? -->
-      <p v-text="person.notes"></p>
+    <div class="notice">
+      <strong>Notes:</strong>
+      <!-- FIX 11: Text interpolation escapes the content instead of executing it. -->
+      <p>{{ person.notes }}</p>
     </div>
 
     <div class="actions">

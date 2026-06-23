@@ -12,6 +12,8 @@
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
 
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/../src/db.php';
@@ -84,10 +86,14 @@ function createFakeToken(array $user): string
         'user_id' => $user['id'],
         'role' => $user['role'],
         'email' => $user['email'],
-        'note' => 'INSECURE_FAKE_TOKEN_NO_SIGNATURE_NO_EXPIRY'
+        'iat' => time(),
+        "exp" => time() + 3600
     ];
 
-    return base64_encode(json_encode($payload));
+    // ==========================================================
+    // FIX 5: Fix JWT Authentication
+    // ==========================================================
+    return JWT::encode($payload, "$2a$12$0WZCmmeBrxrH5HcmgQLPrOd/P6PqA3fnV5yPYfSNHduYaCizpE7cW", 'HS256');
 }
 
 // INSECURE: This trusts an unsigned, editable token.
@@ -99,13 +105,13 @@ function getFakeUserFromToken(Request $request): ?array
     if (!$auth || !preg_match('/Bearer\s+(\S+)/', $auth, $matches)) {
         return null;
     }
-    $json = base64_decode($matches[1], true);
 
-    if (!$json) {
+    try {
+        $decoded = JWT::decode($matches[1], new Key("$2a$12$0WZCmmeBrxrH5HcmgQLPrOd/P6PqA3fnV5yPYfSNHduYaCizpE7cW", "HS256"));
+        return (array) $decoded;
+    } catch (\Exception $e) {
         return null;
     }
-    $payload = json_decode($json, true);
-    return is_array($payload) ? $payload : null;
 }
 
 // ==========================================================
@@ -252,6 +258,13 @@ $app->get('/api/profile', function (Request $request, Response $response) {
         // If token missing, defaults to user 1.
         // If token exists, trusts unsigned editable token.
         $fakeUser = getFakeUserFromToken($request);
+
+        if (!$fakeUser) {
+            return jsonResponse($response, [
+                "error" => "Unauthorized"
+            ], 401);
+        }
+
         $userId = $fakeUser['user_id'] ?? 1;
 
         // INSECURE: SELECT * returns password/password_hash.
